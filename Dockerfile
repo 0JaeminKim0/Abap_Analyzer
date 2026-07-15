@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src ./src
 COPY webapp ./webapp
 
-ENV PYTHONPATH=/app/src \
+# /app : webapp 패키지 import, /app/src : core 패키지 import
+ENV PYTHONPATH=/app:/app/src \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8000
