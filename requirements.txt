@@ -1,0 +1,7 @@
+# Railway 웹 서비스 런타임 의존성
+anthropic>=0.40
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.0
+jsonschema>=4.0        # core.validate 가 사용
+openpyxl>=3.1          # tools/make_template.py 용 (런타임 필수 아님)

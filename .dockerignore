@@ -1,0 +1,11 @@
+_palantir_foundry_backup/
+transforms/
+functions/
+tools/
+tests/
+**/__pycache__/
+*.pyc
+*.xlsx
+*.md
+*.html
+.git/

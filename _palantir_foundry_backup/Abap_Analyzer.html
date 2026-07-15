@@ -1,0 +1,622 @@
+<title>ABAP Analyzer — LLM 기반 정적 분석 도구</title>
+<style>
+  :root {
+    --bg: #eef0f3;
+    --surface: #ffffff;
+    --surface-2: #f6f7f9;
+    --ink: #171a21;
+    --muted: #5b6472;
+    --faint: #8a93a2;
+    --border: #e0e3e9;
+    --border-strong: #cdd2dc;
+    --accent: #0b7285;
+    --accent-soft: #d7edf1;
+    --accent-ink: #084d5b;
+    --sev-high: #d6336c;
+    --sev-high-bg: #fbe4ec;
+    --sev-med: #e8863c;
+    --sev-med-bg: #fbeeddff;
+    --sev-low: #5c7080;
+    --sev-low-bg: #eaedf1;
+    --code-bg: #f4f6f8;
+    --code-ink: #21262d;
+    --code-gutter: #aab3c0;
+    --shadow: 0 1px 2px rgba(20,26,40,.04), 0 8px 24px -12px rgba(20,26,40,.18);
+    --mono: "Cascadia Code", "Consolas", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116;
+      --surface: #161a21;
+      --surface-2: #1b2028;
+      --ink: #e7eaef;
+      --muted: #9aa4b2;
+      --faint: #6b7480;
+      --border: #262c36;
+      --border-strong: #333b47;
+      --accent: #3bbccb;
+      --accent-soft: #123840;
+      --accent-ink: #7fd8e3;
+      --sev-high: #ff6b9d;
+      --sev-high-bg: #3a1622;
+      --sev-med: #f0a862;
+      --sev-med-bg: #3a2916;
+      --sev-low: #97a3b3;
+      --sev-low-bg: #232a33;
+      --code-bg: #10141a;
+      --code-ink: #cdd4de;
+      --code-gutter: #4a545f;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f3; --surface: #ffffff; --surface-2: #f6f7f9; --ink: #171a21;
+    --muted: #5b6472; --faint: #8a93a2; --border: #e0e3e9; --border-strong: #cdd2dc;
+    --accent: #0b7285; --accent-soft: #d7edf1; --accent-ink: #084d5b;
+    --sev-high: #d6336c; --sev-high-bg: #fbe4ec; --sev-med: #e8863c; --sev-med-bg: #fbeedd;
+    --sev-low: #5c7080; --sev-low-bg: #eaedf1;
+    --code-bg: #f4f6f8; --code-ink: #21262d; --code-gutter: #aab3c0;
+    --shadow: 0 1px 2px rgba(20,26,40,.04), 0 8px 24px -12px rgba(20,26,40,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1116; --surface: #161a21; --surface-2: #1b2028; --ink: #e7eaef;
+    --muted: #9aa4b2; --faint: #6b7480; --border: #262c36; --border-strong: #333b47;
+    --accent: #3bbccb; --accent-soft: #123840; --accent-ink: #7fd8e3;
+    --sev-high: #ff6b9d; --sev-high-bg: #3a1622; --sev-med: #f0a862; --sev-med-bg: #3a2916;
+    --sev-low: #97a3b3; --sev-low-bg: #232a33;
+    --code-bg: #10141a; --code-ink: #cdd4de; --code-gutter: #4a545f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- Hero ---------- */
+  header.hero {
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 22px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 26px; height: 1.5px;
+    background: var(--accent);
+    display: inline-block;
+  }
+  h1 {
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -.02em;
+    font-weight: 780;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  h1 .sub { color: var(--accent); }
+  .lede {
+    font-size: 18.5px;
+    color: var(--muted);
+    max-width: 62ch;
+    margin: 0 0 28px;
+  }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .tag {
+    padding: 5px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: 100px;
+    color: var(--muted);
+    background: var(--surface);
+  }
+
+  /* ---------- TOC ---------- */
+  nav.toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 56px;
+    box-shadow: var(--shadow);
+  }
+  nav.toc h2 {
+    font-family: var(--mono);
+    font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); margin: 0 0 14px; font-weight: 600;
+  }
+  nav.toc ol {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 32px;
+  }
+  nav.toc a {
+    display: flex; gap: 12px; align-items: baseline;
+    text-decoration: none; color: var(--ink);
+    padding: 7px 0; border-bottom: 1px solid transparent;
+    font-size: 15px;
+  }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .num { font-family: var(--mono); font-size: 12px; color: var(--accent); min-width: 26px; }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 64px; scroll-margin-top: 24px; }
+  .part-label {
+    font-family: var(--mono);
+    font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin-bottom: 8px;
+  }
+  h2.part {
+    font-size: clamp(25px, 4vw, 33px);
+    letter-spacing: -.015em; font-weight: 760; margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .part-intro { color: var(--muted); font-size: 16.5px; margin: 0 0 8px; max-width: 66ch; }
+  hr.rule { border: 0; border-top: 2px solid var(--ink); opacity: .12; margin: 40px 0; }
+
+  h3 {
+    font-size: 20px; letter-spacing: -.01em; font-weight: 700;
+    margin: 40px 0 14px; display: flex; gap: 11px; align-items: baseline;
+  }
+  h3 .h3num {
+    font-family: var(--mono); font-size: 13px; color: var(--accent);
+    background: var(--accent-soft); padding: 2px 8px; border-radius: 6px;
+  }
+  h4 { font-size: 15.5px; font-weight: 700; margin: 26px 0 10px; color: var(--ink); }
+  p { margin: 0 0 14px; }
+  .muted { color: var(--muted); }
+
+  ul.clean { margin: 0 0 16px; padding-left: 0; list-style: none; }
+  ul.clean li { position: relative; padding-left: 22px; margin-bottom: 8px; }
+  ul.clean li::before {
+    content: ""; position: absolute; left: 4px; top: 11px;
+    width: 6px; height: 6px; border-radius: 2px; background: var(--accent);
+  }
+  ul.dash li::before { border-radius: 2px; background: var(--sev-low); }
+
+  strong { font-weight: 680; }
+  code.inline {
+    font-family: var(--mono); font-size: .88em;
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 5px; color: var(--accent-ink);
+    white-space: nowrap;
+  }
+
+  /* ---------- Callout ---------- */
+  .callout {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 16px 20px; margin: 22px 0;
+    font-size: 15.5px;
+  }
+  .callout .k { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent-ink); display: block; margin-bottom: 6px; }
+
+  /* ---------- Cards grid ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px; margin: 22px 0; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 18px; box-shadow: var(--shadow);
+  }
+  .card .cat {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 8px;
+  }
+  .card p { font-size: 14px; margin: 0; color: var(--muted); }
+
+  /* ---------- Tables ---------- */
+  .tablewrap { overflow-x: auto; margin: 20px 0; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; background: var(--surface); }
+  thead th {
+    text-align: left; font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); font-weight: 600;
+    padding: 12px 16px; background: var(--surface-2); border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--surface-2); }
+  td .rid { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--accent-ink); white-space: nowrap; }
+
+  /* ---------- Severity chips ---------- */
+  .sev { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 100px; white-space: nowrap; letter-spacing: .02em; }
+  .sev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
+  .sev.high { background: var(--sev-high-bg); color: var(--sev-high); }
+  .sev.high::before { background: var(--sev-high); }
+  .sev.med { background: var(--sev-med-bg); color: var(--sev-med); }
+  .sev.med::before { background: var(--sev-med); }
+  .sev.low { background: var(--sev-low-bg); color: var(--sev-low); }
+  .sev.low::before { background: var(--sev-low); }
+
+  /* ---------- Code blocks ---------- */
+  .code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 12px; margin: 18px 0; overflow: hidden; box-shadow: var(--shadow);
+  }
+  .code .code-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border-bottom: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--surface-2);
+  }
+  .code .code-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); }
+  .code .code-head .fname { margin-left: 4px; color: var(--ink); }
+  .code .code-head .lang { margin-left: auto; color: var(--faint); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
+  pre { margin: 0; padding: 16px 18px; overflow-x: auto; }
+  pre code {
+    font-family: var(--mono); font-size: 13px; line-height: 1.7; color: var(--code-ink);
+    display: block; white-space: pre;
+  }
+  /* line-numbered variant */
+  pre.numbered { counter-reset: ln; padding-left: 0; }
+  pre.numbered .line { display: block; counter-increment: ln; padding-left: 58px; position: relative; }
+  pre.numbered .line::before {
+    content: counter(ln, decimal-leading-zero);
+    position: absolute; left: 0; width: 42px; text-align: right;
+    color: var(--code-gutter); font-variant-numeric: tabular-nums;
+    border-right: 1px solid var(--border); padding-right: 10px;
+  }
+  pre.numbered .line.flag { background: color-mix(in srgb, var(--sev-med) 12%, transparent); }
+  pre.numbered .line.flag::before { color: var(--sev-med); }
+  .cmt { color: var(--faint); font-style: italic; }
+  .kw { color: var(--accent); font-weight: 600; }
+
+  /* ---------- Roadmap steps ---------- */
+  .steps { display: grid; gap: 12px; margin: 22px 0; }
+  .step { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); }
+  .step .sn { font-family: var(--mono); font-weight: 700; color: var(--accent);
+    background: var(--accent-soft); width: 34px; height: 34px; border-radius: 9px;
+    display: grid; place-items: center; font-size: 14px; }
+  .step h4 { margin: 2px 0 4px; }
+  .step p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  footer { margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+
+  @media (max-width: 640px) {
+    nav.toc ol { grid-template-columns: 1fr; }
+    header.hero { padding: 48px 0 32px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">SAP · Static Code Analysis · LLM</div>
+    <h1>ABAP Analyzer<br><span class="sub">LLM 기반 정적 분석 도구</span></h1>
+    <p class="lede">방대한 ABAP 레거시 코드를 LLM으로 분석해 성능·품질·보안 문제를 찾아내고, 그 이유와 개선 코드까지 자연어로 제시한다. 개념 소개부터 실제 구현 기획까지 한 문서에 담았다.</p>
+    <div class="meta-row">
+      <span class="tag">개념 소개 + 기획서</span>
+      <span class="tag">v1 · 2026-07</span>
+      <span class="tag">19개 규칙셋</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="목차">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#part1"><span class="num">P1</span><span>ABAP Analyzer란 무엇인가</span></a></li>
+      <li><a href="#part2"><span class="num">P2</span><span>LLM 기반 도구 기획서</span></a></li>
+      <li><a href="#arch"><span class="num">2.4</span><span>시스템 아키텍처</span></a></li>
+      <li><a href="#roadmap"><span class="num">2.7</span><span>개발 로드맵 · 리스크</span></a></li>
+      <li><a href="#appendixA"><span class="num">A</span><span>PoC 프롬프트 실제 설계</span></a></li>
+      <li><a href="#appendixB"><span class="num">B</span><span>규칙셋 상세</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ================= PART 1 ================= -->
+  <section id="part1">
+    <div class="part-label">Part 1 · 개념 소개</div>
+    <h2 class="part">ABAP Analyzer란 무엇인가</h2>
+    <p class="part-intro"><strong>ABAP Analyzer</strong>는 SAP 시스템에서 작성된 ABAP 소스 코드를 자동으로 분석하여 품질·성능·보안·표준 준수 문제를 찾아내는 도구다. 사람이 코드를 일일이 읽지 않고도 문제 지점을 기계적으로 짚어 준다.</p>
+
+    <h3><span class="h3num">1.2</span>배경 — ABAP은 왜 분석이 필요한가</h3>
+    <ul class="clean">
+      <li><strong>ABAP</strong>(Advanced Business Application Programming)은 SAP ERP(ECC, S/4HANA)의 업무 로직을 개발하는 SAP 고유 언어다.</li>
+      <li>대기업의 회계·물류·인사·생산 등 <strong>핵심 업무 로직 대부분이 ABAP</strong>으로 작성되어 있다.</li>
+      <li>수십 년간 여러 개발자의 손을 거친 <strong>방대한 레거시 코드</strong>라, 수동 리뷰만으로는 문제를 다 잡을 수 없다.</li>
+    </ul>
+
+    <h3><span class="h3num">1.3</span>무엇을 잡아내는가</h3>
+    <div class="cards">
+      <div class="card"><div class="cat">Performance</div><p>SELECT *, 루프 내 DB 조회, SELECT…ENDSELECT, 인덱스 미사용</p></div>
+      <div class="card"><div class="cat">Quality</div><p>미사용 변수, 중복 코드, 과도하게 긴 함수, 오류 처리 누락</p></div>
+      <div class="card"><div class="cat">Security</div><p>SQL Injection, AUTHORITY-CHECK 누락, 위험한 동적 코드 실행</p></div>
+      <div class="card"><div class="cat">Standard</div><p>명명 규칙, 코딩 가이드라인, S/4HANA 비권장 구버전 문법</p></div>
+    </div>
+
+    <h3><span class="h3num">1.4</span>이미 존재하는 도구 — 그리고 그 한계</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>도구</th><th>성격</th><th>특징</th></tr></thead>
+        <tbody>
+          <tr><td><strong>SAP Code Inspector (SCI)</strong></td><td>SAP 기본</td><td>규칙 기반 정적 분석의 표준</td></tr>
+          <tr><td><strong>ABAP Test Cockpit (ATC)</strong></td><td>SAP 기본</td><td>SCI 확장, 개발 프로세스 통합</td></tr>
+          <tr><td><strong>Custom Code Migration</strong></td><td>SAP 제공</td><td>S/4HANA 전환용 영향도 분석</td></tr>
+          <tr><td><strong>SonarQube (ABAP)</strong></td><td>서드파티</td><td>CI/CD 통합, 대시보드</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <span class="k">기존 규칙 기반 도구의 한계</span>
+      규칙에 없는 새 패턴은 못 잡고, 코드의 <strong>의도(문맥)를 이해하지 못하며</strong>, 사람이 읽을 수 있는 설명·개선안을 자연어로 제시하지 못한다. → <strong>바로 이 지점에서 LLM 기반 접근이 필요하다.</strong>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ================= PART 2 ================= -->
+  <section id="part2">
+    <div class="part-label">Part 2 · 기획서</div>
+    <h2 class="part">LLM 기반 ABAP Analyzer 도구</h2>
+    <p class="part-intro">"ABAP 코드를 넣으면, LLM이 문제를 찾아 자연어로 설명하고 개선 코드(before → after)까지 제시하는 분석 도구." 기존 규칙 기반 도구가 놓치는 <strong>문맥 이해</strong>와 <strong>자연어 설명</strong>이 핵심 차별점이다.</p>
+
+    <h3><span class="h3num">2.2</span>목표 &amp; 비목표</h3>
+    <div class="cards">
+      <div class="card">
+        <div class="cat">Goals</div>
+        <p style="color:var(--ink)">성능·품질·보안 이슈 탐지 + 이유 설명 · 개선 코드 자동 생성 · SCI/ATC 결과 재해석·우선순위화 · 이해하기 쉬운 리포트</p>
+      </div>
+      <div class="card">
+        <div class="cat">Non-Goals (초기)</div>
+        <p>SAP 실시간 연동 · 코드 자동 커밋/배포 · 문법 100% 완벽 파싱(초기엔 LLM 이해에 의존)</p>
+      </div>
+    </div>
+
+    <h3 id="arch"><span class="h3num">2.4</span>시스템 아키텍처</h3>
+    <p class="muted">입력 → 분석 엔진(4단계) → 출력의 3계층 구조.</p>
+    <div class="code">
+      <div class="code-head"><span class="dot"></span><span class="fname">pipeline</span><span class="lang">flow</span></div>
+      <pre><code>┌─ 입력 계층 ─────┐   ┌─ 분석 엔진 ──────────┐   ┌─ 출력 계층 ──────┐
+│ ABAP 소스        │→ │ 1. 전처리 / 청킹      │→ │ 이슈 리스트       │
+│ 파일·붙여넣기·Git │   │ 2. 규칙 프리체크      │   │ 심각도 / 카테고리 │
+│                  │   │ 3. LLM 분석          │   │ 설명 + 개선 코드  │
+│                  │   │ 4. 결과 검증          │   │ 리포트 (MD/HTML) │
+└──────────────────┘   └──────────────────────┘   └──────────────────┘</code></pre>
+    </div>
+    <ul class="clean">
+      <li><strong>1. 청킹</strong> — 긴 프로그램을 논리 단위(FORM/METHOD/FUNCTION)로 분할해 컨텍스트 한도에 맞춤.</li>
+      <li><strong>2. 규칙 프리체크</strong> — 명백한 안티패턴을 정규식으로 먼저 표시 → LLM 비용 절감 + 정확도 보강.</li>
+      <li><strong>3. LLM 분석</strong> — 각 청크를 구조화된 JSON으로 분석(부록 A).</li>
+      <li><strong>4. 결과 검증</strong> — 스키마 검증 + 라인 번호 존재 확인으로 환각 방지.</li>
+    </ul>
+
+    <h3 id="roadmap"><span class="h3num">2.7</span>개발 로드맵</h3>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div><h4>PoC</h4><p>단일 파일 붙여넣기 → LLM 분석 → JSON 리포트. 동작 검증.</p></div></div>
+      <div class="step"><div class="sn">2</div><div><h4>MVP</h4><p>청킹 + 규칙 프리체크 + 웹 UI(이슈 목록·개선안). 사용 가능한 도구.</p></div></div>
+      <div class="step"><div class="sn">3</div><div><h4>확장</h4><p>다중 파일/프로젝트, 심각도 대시보드, 리포트 export. 팀 활용.</p></div></div>
+      <div class="step"><div class="sn">4</div><div><h4>통합</h4><p>Git/CI 연동, SAP 시스템 연동 검토. 파이프라인화.</p></div></div>
+    </div>
+
+    <h4>리스크 &amp; 대응</h4>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>리스크</th><th>대응 방안</th></tr></thead>
+        <tbody>
+          <tr><td>LLM 환각 (없는 문제 지어냄)</td><td>출력 스키마 검증 + 라인 번호 대조 + 규칙 프리체크 병행</td></tr>
+          <tr><td>긴 코드 컨텍스트 초과</td><td>논리 단위 청킹, 요약 후 재분석</td></tr>
+          <tr><td>코드 유출 (보안)</td><td>온프렘/사내 배포 옵션, 민감정보 마스킹</td></tr>
+          <tr><td>분석 비용</td><td>규칙으로 1차 필터 후 LLM 호출 최소화</td></tr>
+          <tr><td>ABAP 도메인 지식 부족</td><td>프롬프트에 SAP 코딩 가이드·예시 주입 (RAG)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ================= APPENDIX A ================= -->
+  <section id="appendixA">
+    <div class="part-label">Appendix A</div>
+    <h2 class="part">PoC 프롬프트 실제 설계</h2>
+    <p class="part-intro">ABAP 소스 1개를 입력받아 규칙셋 기준으로 이슈를 찾아 구조화된 JSON으로 출력한다. 프롬프트는 <strong>① System · ② Developer · ③ User</strong> 3-블록으로 구성한다.</p>
+
+    <h3><span class="h3num">A.1</span>System 프롬프트 — 역할 · 환각 방지 원칙</h3>
+    <div class="code">
+      <div class="code-head"><span class="dot"></span><span class="fname">system.txt</span><span class="lang">prompt</span></div>
+      <pre><code>당신은 20년 경력의 시니어 SAP ABAP 코드 리뷰어입니다.
+주어진 ABAP 소스를 정적 분석하여 성능·품질·보안·표준 관점의 문제를 찾습니다.
+
+반드시 지켜야 할 원칙:
+1. 실제 코드에 근거해서만 지적한다. 없는 문제를 지어내지 않는다.
+2. 각 지적에는 반드시 실제 존재하는 라인 번호를 명시한다.
+3. 확신이 없으면 severity를 낮추거나 보고하지 않는다. (거짓 양성 최소화)
+4. 개선안(after)은 컴파일 가능한 유효한 ABAP 구문으로 작성한다.
+5. 출력은 지정된 JSON 스키마만 사용한다. 그 외 설명 문장을 덧붙이지 않는다.
+6. explanation과 suggestion은 한국어로 작성한다.</code></pre>
+    </div>
+
+    <h3><span class="h3num">A.2</span>Developer 프롬프트 — 규칙셋 + 출력 스키마 주입</h3>
+    <div class="code">
+      <div class="code-head"><span class="dot"></span><span class="fname">developer.txt</span><span class="lang">schema</span></div>
+      <pre><code>[검사 규칙셋]  PERF-001~006 · QUAL-001~006 · SEC-001~004 · STD-001~003 (부록 B)
+
+[severity 기준]
+  high   : 운영 장애·보안 사고 직결 (루프 내 DB조회, SQL Injection)
+  medium : 성능 저하·유지보수성 악화
+  low    : 스타일·표준 위반
+
+[출력 JSON 스키마] — 이 구조만 사용
+{
+  "findings": [{
+    "id": "규칙ID",  "category": "performance|quality|security|standard",
+    "severity": "high|medium|low",  "line": &lt;정수&gt;,
+    "title": "&lt;한 줄 요약&gt;",  "explanation": "&lt;왜 문제인지&gt;",
+    "suggestion": "&lt;어떻게 고칠지&gt;",  "before": "&lt;문제 코드&gt;",  "after": "&lt;개선 코드&gt;"
+  }],
+  "summary": { "high": &lt;int&gt;, "medium": &lt;int&gt;, "low": &lt;int&gt; }
+}
+문제가 없으면 findings=[], summary는 모두 0.</code></pre>
+    </div>
+
+    <h3><span class="h3num">A.3</span>User 프롬프트 — 분석 대상 ABAP 소스</h3>
+    <p class="muted">성능·품질·보안 세 카테고리가 한 소스에 모두 들어가도록 구성한 골든셋 예시. 강조된 줄이 이슈 지점이다.</p>
+    <div class="code">
+      <div class="code-head"><span class="dot"></span><span class="fname">z_customer_sales.abap</span><span class="lang">ABAP</span></div>
+      <pre class="numbered"><code><span class="line"><span class="kw">REPORT</span> z_customer_sales.</span><span class="line"></span><span class="line"><span class="kw">DATA</span>: lt_kna1  <span class="kw">TYPE TABLE OF</span> kna1,</span><span class="line">      ls_kna1  <span class="kw">TYPE</span> kna1,</span><span class="line">      lt_vbak  <span class="kw">TYPE TABLE OF</span> vbak,</span><span class="line">      lv_total <span class="kw">TYPE</span> p <span class="kw">DECIMALS</span> 2,</span><span class="line flag">      lv_unused <span class="kw">TYPE</span> i.                 <span class="cmt">" 미사용 변수</span></span><span class="line"></span><span class="line"><span class="kw">PARAMETERS</span>: p_land <span class="kw">TYPE</span> kna1-land1.</span><span class="line"></span><span class="line"><span class="cmt">" 전체 고객 조회</span></span><span class="line flag"><span class="kw">SELECT</span> * <span class="kw">FROM</span> kna1 <span class="kw">INTO TABLE</span> lt_kna1.   <span class="cmt">" SELECT *, WHERE 없음</span></span><span class="line"></span><span class="line"><span class="kw">LOOP AT</span> lt_kna1 <span class="kw">INTO</span> ls_kna1.</span><span class="line">  <span class="cmt">" 고객별 주문을 루프 안에서 매번 조회</span></span><span class="line flag">  <span class="kw">SELECT</span> * <span class="kw">FROM</span> vbak <span class="kw">INTO TABLE</span> lt_vbak</span><span class="line flag">    <span class="kw">WHERE</span> kunnr = ls_kna1-kunnr.         <span class="cmt">" 루프 내부 DB 조회 (N+1)</span></span><span class="line"></span><span class="line">  lv_total = lv_total + lines( lt_vbak ).</span><span class="line"></span><span class="line flag">  <span class="kw">IF</span> ls_kna1-land1 = <span style="color:var(--sev-med)">'KR'</span>.               <span class="cmt">" 하드코딩 값</span></span><span class="line">    <span class="kw">WRITE</span>: / ls_kna1-kunnr, ls_kna1-name1.</span><span class="line">  <span class="kw">ENDIF</span>.</span><span class="line"><span class="kw">ENDLOOP</span>.</span><span class="line"></span><span class="line flag"><span class="cmt">" 권한 검사 없이 민감 데이터 출력 (AUTHORITY-CHECK 누락)</span></span><span class="line"><span class="kw">WRITE</span>: / 'Total Orders:', lv_total.</span></code></pre>
+    </div>
+
+    <h4>이 소스에 심어둔 이슈 → 규칙셋 매핑</h4>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>라인</th><th>규칙</th><th>심각도</th><th>문제</th></tr></thead>
+        <tbody>
+          <tr><td>7</td><td><span class="rid">QUAL-001</span></td><td><span class="sev low">low</span></td><td>미사용 변수 <code class="inline">lv_unused</code></td></tr>
+          <tr><td>12</td><td><span class="rid">PERF-001 / 004</span></td><td><span class="sev high">high</span></td><td><code class="inline">SELECT *</code> + WHERE 없는 전체 조회</td></tr>
+          <tr><td>16–17</td><td><span class="rid">PERF-002</span></td><td><span class="sev high">high</span></td><td>루프 내부 DB 조회 (N+1)</td></tr>
+          <tr><td>16</td><td><span class="rid">PERF-001</span></td><td><span class="sev med">medium</span></td><td><code class="inline">SELECT *</code></td></tr>
+          <tr><td>21</td><td><span class="rid">QUAL-002</span></td><td><span class="sev low">low</span></td><td>하드코딩 값 <code class="inline">'KR'</code></td></tr>
+          <tr><td>26–27</td><td><span class="rid">SEC-002</span></td><td><span class="sev high">high</span></td><td>출력 전 <code class="inline">AUTHORITY-CHECK</code> 누락</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="h3num">A.4</span>기대 출력 — 검증용 정답 JSON</h3>
+    <div class="code">
+      <div class="code-head"><span class="dot"></span><span class="fname">expected.json</span><span class="lang">JSON</span></div>
+      <pre><code>{
+  "findings": [
+    {
+      "id": "PERF-002", "category": "performance", "severity": "high", "line": 16,
+      "title": "LOOP 내부에서 SELECT 실행 (N+1 조회)",
+      "explanation": "LOOP AT lt_kna1 안에서 라인 16의 SELECT가 반복 실행되어 고객 수만큼 DB 왕복이 발생합니다.",
+      "suggestion": "루프 진입 전 FOR ALL ENTRIES로 vbak을 한 번에 조회해 내부 테이블에 담고, 루프 안에서는 READ TABLE로 조회하세요.",
+      "before": "LOOP AT lt_kna1 INTO ls_kna1.\n  SELECT * FROM vbak INTO TABLE lt_vbak WHERE kunnr = ls_kna1-kunnr.",
+      "after": "SELECT kunnr FROM vbak INTO TABLE @DATA(lt_vbak)\n  FOR ALL ENTRIES IN @lt_kna1 WHERE kunnr = @lt_kna1-kunnr."
+    },
+    {
+      "id": "PERF-004", "category": "performance", "severity": "high", "line": 12,
+      "title": "WHERE 없는 전체 테이블 조회 + SELECT *",
+      "explanation": "라인 12에서 kna1 전체를 컬럼 제한/조건 없이 읽어 대량 데이터 시 심각한 부하가 됩니다.",
+      "suggestion": "p_land 등 조건절을 추가하고 필요한 컬럼만 명시하세요.",
+      "before": "SELECT * FROM kna1 INTO TABLE lt_kna1.",
+      "after": "SELECT kunnr name1 land1 FROM kna1 INTO TABLE @DATA(lt_kna1) WHERE land1 = @p_land."
+    },
+    {
+      "id": "SEC-002", "category": "security", "severity": "high", "line": 27,
+      "title": "권한 검사 없이 데이터 출력",
+      "explanation": "고객 데이터를 출력하기 전에 AUTHORITY-CHECK가 없어 권한 없는 사용자도 조회할 수 있습니다.",
+      "suggestion": "출력 전 AUTHORITY-CHECK OBJECT 'V_KNA1_BRG' 등 적절한 권한 오브젝트를 검사하세요.",
+      "before": "WRITE: / 'Total Orders:', lv_total.",
+      "after": "AUTHORITY-CHECK OBJECT 'V_KNA1_BRG' ID 'ACTVT' FIELD '03'.\nIF sy-subrc = 0. WRITE: / 'Total Orders:', lv_total. ENDIF."
+    },
+    { "id": "QUAL-001", "category": "quality", "severity": "low", "line": 7,
+      "title": "미사용 변수 lv_unused",
+      "explanation": "선언 후 어디서도 참조되지 않습니다.", "suggestion": "선언을 제거하세요.",
+      "before": "lv_unused TYPE i.", "after": "" },
+    { "id": "QUAL-002", "category": "quality", "severity": "low", "line": 21,
+      "title": "하드코딩된 국가 코드 'KR'",
+      "explanation": "리터럴 'KR'이 로직에 직접 박혀 있어 변경/재사용이 어렵습니다.",
+      "suggestion": "CONSTANTS 또는 파라미터로 분리하세요.",
+      "before": "IF ls_kna1-land1 = 'KR'.", "after": "CONSTANTS c_land_kr TYPE land1 VALUE 'KR'.\nIF ls_kna1-land1 = c_land_kr." }
+  ],
+  "summary": { "high": 3, "medium": 0, "low": 2 }
+}</code></pre>
+    </div>
+
+    <h3><span class="h3num">A.5</span>PoC 검증 방법</h3>
+    <ul class="clean">
+      <li><strong>골든셋 테스트</strong> — 위처럼 "코드 ↔ 정답 JSON" 쌍을 10~20개 준비.</li>
+      <li><strong>평가 지표</strong> — 탐지율(Recall)·오탐률(False Positive)·라인 번호 정확도.</li>
+      <li><strong>환각 체크</strong> — 출력 <code class="inline">line</code> 값이 입력 코드 라인 범위 내인지 자동 검증.</li>
+      <li><strong>스키마 검증</strong> — JSON Schema로 필드·타입 강제(파이프라인 자동화).</li>
+      <li><strong>반복 튜닝</strong> — 오탐 잦은 규칙은 System 원칙에 예외 규정 추가.</li>
+    </ul>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ================= APPENDIX B ================= -->
+  <section id="appendixB">
+    <div class="part-label">Appendix B</div>
+    <h2 class="part">규칙셋 상세 <span style="font-weight:500;color:var(--muted);font-size:.6em;">v1 · 19 rules</span></h2>
+    <p class="part-intro">각 규칙은 <code class="inline">ID · 카테고리 · 기본 severity · 탐지 패턴 · 개선 방향</code>으로 정의한다.</p>
+
+    <h3><span class="h3num">B.1</span>성능 — Performance</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>ID</th><th>규칙</th><th>severity</th><th>개선 방향</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rid">PERF-001</span></td><td><code class="inline">SELECT *</code> 사용</td><td><span class="sev med">medium</span></td><td>필요한 컬럼만 명시</td></tr>
+          <tr><td><span class="rid">PERF-002</span></td><td>루프 내부 DB 조회 (N+1)</td><td><span class="sev high">high</span></td><td>FOR ALL ENTRIES / 사전 조회 후 READ TABLE</td></tr>
+          <tr><td><span class="rid">PERF-003</span></td><td><code class="inline">SELECT…ENDSELECT</code></td><td><span class="sev high">high</span></td><td>INTO TABLE로 한 번에 조회</td></tr>
+          <tr><td><span class="rid">PERF-004</span></td><td>WHERE 없는 전체 조회</td><td><span class="sev high">high</span></td><td>조건절 추가, 인덱스 활용</td></tr>
+          <tr><td><span class="rid">PERF-005</span></td><td>정렬/인덱스 미활용</td><td><span class="sev med">medium</span></td><td>적절한 인덱스/SORT 사용</td></tr>
+          <tr><td><span class="rid">PERF-006</span></td><td>내부 테이블 선형 탐색</td><td><span class="sev med">medium</span></td><td>SORTED/HASHED 테이블 사용</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="h3num">B.2</span>품질 — Quality</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>ID</th><th>규칙</th><th>severity</th><th>개선 방향</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rid">QUAL-001</span></td><td>미사용 변수/상수</td><td><span class="sev low">low</span></td><td>제거</td></tr>
+          <tr><td><span class="rid">QUAL-002</span></td><td>매직 넘버/하드코딩 값</td><td><span class="sev low">low</span></td><td>CONSTANTS로 분리</td></tr>
+          <tr><td><span class="rid">QUAL-003</span></td><td>예외/오류 처리 누락</td><td><span class="sev med">medium</span></td><td>SY-SUBRC 검사 / TRY…CATCH</td></tr>
+          <tr><td><span class="rid">QUAL-004</span></td><td>과도하게 긴 루틴</td><td><span class="sev med">medium</span></td><td>기능 분리 리팩터링</td></tr>
+          <tr><td><span class="rid">QUAL-005</span></td><td>중복 코드 블록</td><td><span class="sev med">medium</span></td><td>공통 루틴/메서드로 추출</td></tr>
+          <tr><td><span class="rid">QUAL-006</span></td><td>데드 코드/도달 불가</td><td><span class="sev low">low</span></td><td>제거</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="h3num">B.3</span>보안 — Security</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>ID</th><th>규칙</th><th>severity</th><th>개선 방향</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rid">SEC-001</span></td><td>SQL Injection (동적 WHERE)</td><td><span class="sev high">high</span></td><td>파라미터 바인딩, 입력 검증</td></tr>
+          <tr><td><span class="rid">SEC-002</span></td><td>권한 검사 누락</td><td><span class="sev high">high</span></td><td>AUTHORITY-CHECK 추가</td></tr>
+          <tr><td><span class="rid">SEC-003</span></td><td>위험한 동적 코드 실행</td><td><span class="sev high">high</span></td><td>정적 구현으로 대체</td></tr>
+          <tr><td><span class="rid">SEC-004</span></td><td>하드코딩 자격 증명/경로</td><td><span class="sev med">medium</span></td><td>설정 테이블/보안 저장소</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="h3num">B.4</span>표준 준수 — Standard</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>ID</th><th>규칙</th><th>severity</th><th>개선 방향</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rid">STD-001</span></td><td>명명 규칙 위반</td><td><span class="sev low">low</span></td><td>SAP 헝가리안 표기 적용</td></tr>
+          <tr><td><span class="rid">STD-002</span></td><td>주석 부재/불충분</td><td><span class="sev low">low</span></td><td>핵심 로직 주석 보강</td></tr>
+          <tr><td><span class="rid">STD-003</span></td><td>구버전 문법 (S/4HANA 비권장)</td><td><span class="sev med">medium</span></td><td>최신 ABAP 구문으로 전환</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="k">규칙셋 운영 원칙</span>
+      버전 관리(v1 → v2) · 조직 정책별 severity 조정 · 프로젝트별 규칙 on/off · 신규 안티패턴 발견 시 규칙 ID 추가 + 골든셋 테스트 케이스 동반 등록.
+    </div>
+  </section>
+
+  <footer>
+    <span>ABAP Analyzer · 개념 소개 &amp; LLM 기반 도구 기획서</span>
+    <span>v1 — 2026.07</span>
+  </footer>
+
+</div>
