@@ -25,7 +25,8 @@ from pydantic import BaseModel  # noqa: E402
 
 from core import analyze  # noqa: E402
 from webapp import policy  # noqa: E402
-from webapp.anthropic_adapter import make_complete_fn, DEFAULT_MODEL  # noqa: E402
+from webapp.anthropic_adapter import (  # noqa: E402
+    make_complete_fn, DEFAULT_MODEL, UsageTracker, usage_dict)
 
 app = FastAPI(title="ABAP Analyzer", version="1.1")
 
@@ -44,10 +45,14 @@ def health():
 @app.post("/analyze")
 def analyze_endpoint(body: AnalyzeIn):
     if not body.source.strip():
-        return {"findings": [], "summary": {"high": 0, "medium": 0, "low": 0}, "errors": []}
-    complete = make_complete_fn()
-    return analyze.analyze_source(
+        return {"findings": [], "summary": {"high": 0, "medium": 0, "low": 0},
+                "errors": [], "usage": usage_dict(UsageTracker(), DEFAULT_MODEL)}
+    tracker = UsageTracker()
+    complete = make_complete_fn(usage=tracker)
+    result = analyze.analyze_source(
         body.source, policy.get_active(), complete, merge_developer_into_system=True)
+    result["usage"] = usage_dict(tracker, DEFAULT_MODEL)
+    return result
 
 
 # ---------- 정책 관리 ----------
@@ -80,12 +85,20 @@ def reset_policy():
 
 
 @app.get("/policy/template.csv")
-def policy_template():
-    csv_text = policy.template_csv()
+def policy_template_csv():
     return Response(
-        content=csv_text,
+        content=policy.template_csv(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="severity_policy_template.csv"'},
+    )
+
+
+@app.get("/policy/template.xlsx")
+def policy_template_xlsx():
+    return Response(
+        content=policy.template_xlsx(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="severity_policy_template.xlsx"'},
     )
 
 
@@ -149,6 +162,16 @@ INDEX_HTML = """<!doctype html>
   .finding pre.after { border-color:var(--accent2); }
   .empty { color:var(--muted); font-size:14px; text-align:center; padding:40px 0; }
   .err { color:var(--high); font-size:13px; }
+
+  /* 하단 토스트(비용 팝업) */
+  #toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(20px);
+    background:var(--surface); border:1px solid var(--accent2); border-left:4px solid var(--accent);
+    border-radius:12px; padding:14px 18px; box-shadow:0 12px 30px -10px rgba(0,0,0,.6);
+    min-width:280px; max-width:92vw; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:50; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+  #toast .cost { font-size:18px; font-weight:750; color:var(--accent); font-family:var(--mono); }
+  #toast .detail { font-size:12.5px; color:var(--muted); font-family:var(--mono); margin-top:4px; }
+  #toast .x { position:absolute; top:8px; right:12px; color:var(--muted); cursor:pointer; font-size:16px; line-height:1; }
 </style>
 </head>
 <body>
@@ -162,7 +185,8 @@ INDEX_HTML = """<!doctype html>
     <span class="lbl">Severity 정책</span>
     <span class="state" id="pstate">로딩 중...</span>
     <span class="spacer"></span>
-    <a class="btn ghost" href="/policy/template.csv">템플릿(CSV) 다운로드</a>
+    <a class="btn ghost" href="/policy/template.xlsx">템플릿 XLSX</a>
+    <a class="btn ghost" href="/policy/template.csv">CSV</a>
     <input type="file" id="pfile" accept=".csv,.xlsx,.xlsm">
     <button id="pupload">업로드</button>
     <button class="ghost" id="preset">기본값</button>
@@ -183,6 +207,12 @@ INDEX_HTML = """<!doctype html>
       <div class="results" id="results"><div class="empty">코드를 넣고 "분석"을 누르세요.</div></div>
     </section>
   </main>
+
+  <div id="toast">
+    <span class="x" id="toastx">×</span>
+    <div class="cost" id="toastcost"></div>
+    <div class="detail" id="toastdetail"></div>
+  </div>
 <script>
 const SAMPLE = `REPORT z_customer_sales.
 DATA: lt_kna1  TYPE TABLE OF kna1,
@@ -250,13 +280,30 @@ $('#run').onclick = async () => {
   try {
     const res = await fetch('/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source})});
     if (!res.ok) throw new Error('HTTP '+res.status);
-    render(await res.json());
+    const data = await res.json();
+    render(data);
+    showCost(data.usage);
     $('#status').textContent = '완료';
   } catch (e) {
     $('#results').innerHTML = '<div class="err">오류: '+esc(e.message)+'</div>';
     $('#status').textContent = '실패';
   } finally { $('#run').disabled = false; }
 };
+
+let toastTimer = null;
+function showCost(u){
+  if (!u || !u.calls) return;
+  const cost = u.cost_usd || 0;
+  const nf = n => (n||0).toLocaleString();
+  $('#toastcost').textContent = '이번 분석: $' + cost.toFixed(4);
+  $('#toastdetail').textContent =
+    '입력 ' + nf(u.input_tokens) + ' + 출력 ' + nf(u.output_tokens) + ' tokens'
+    + ' · 호출 ' + u.calls + '회 · ' + u.model;
+  const t = $('#toast'); t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove('show'), 8000);
+}
+$('#toastx').onclick = () => $('#toast').classList.remove('show');
 
 function render(data){
   const s = data.summary || {high:0,medium:0,low:0};

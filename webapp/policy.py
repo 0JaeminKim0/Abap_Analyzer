@@ -113,6 +113,41 @@ def template_csv():
     return buf.getvalue()
 
 
+def template_xlsx():
+    """모듈이 작성할 Excel 템플릿(드롭다운 포함) 바이트."""
+    from openpyxl import Workbook
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Policy"
+    ws.append(TEMPLATE_HEADERS)
+    for r in RULES:
+        ws.append([r["rule_id"], r["category"], r["rule_name"],
+                   r["default_severity"], r["default_severity"], "Y", "", ""])
+
+    n = len(RULES)
+    # org_severity = E열, enabled = F열
+    dv_sev = DataValidation(type="list", formula1='"high,medium,low,off"', allow_blank=False)
+    dv_sev.prompt = "조직 정책 등급. off = 규칙 비활성."
+    ws.add_data_validation(dv_sev)
+    dv_sev.add(f"E2:E{n + 1}")
+
+    dv_en = DataValidation(type="list", formula1='"Y,N"', allow_blank=False)
+    dv_en.prompt = "이 규칙을 사용할지 여부."
+    ws.add_data_validation(dv_en)
+    dv_en.add(f"F2:F{n + 1}")
+
+    widths = [12, 14, 34, 16, 16, 10, 16, 40]
+    for i, w in enumerate(widths):
+        ws.column_dimensions[chr(ord("A") + i)].width = w
+    ws.freeze_panes = "A2"
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    return bio.getvalue()
+
+
 # ---------- 활성 정책 저장소 (인스턴스 단위) ----------
 _active = None
 _source = "default"

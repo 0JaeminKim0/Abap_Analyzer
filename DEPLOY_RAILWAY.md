@@ -61,12 +61,17 @@ uvicorn webapp.app:app --port 8000
 ## Severity 정책 업로드 (각 모듈이 작성 → 반영)
 
 웹 UI 상단 "Severity 정책" 바에서:
-1. **템플릿(CSV) 다운로드** → 각 모듈/팀이 `org_severity`(high/medium/low/off)·`enabled`(Y/N) 작성
-   - 기존 Excel 템플릿([make_template.py](tools/make_template.py) 산출 `severity_policy_template.xlsx`)도 그대로 업로드 가능
+1. **템플릿 다운로드** — **XLSX**(드롭다운 포함) 또는 **CSV**. 각 모듈/팀이 `org_severity`(high/medium/low/off)·`enabled`(Y/N) 작성
 2. **업로드**(csv/xlsx) → 활성 정책이 즉시 교체되고 이후 분석에 반영
 3. **기본값** → catalog 기본 severity로 복원
 
-엔드포인트: `GET /policy`, `POST /policy`(multipart file), `POST /policy/reset`, `GET /policy/template.csv`
+엔드포인트: `GET /policy`, `POST /policy`(multipart), `POST /policy/reset`,
+`GET /policy/template.xlsx`, `GET /policy/template.csv`
+
+## 비용 표시
+
+분석을 실행하면 하단에 **토스트 팝업**으로 이번 호출의 토큰과 예상 비용($)을 보여준다
+(`/analyze` 응답의 `usage` 필드). 단가는 `webapp/anthropic_adapter.py` 의 `PRICES` 에서 관리.
 
 **영속성(중요):** 기본은 인스턴스 메모리라 재배포/재시작 시 기본값으로 돌아간다.
 재시작 후에도 유지하려면 Railway **Volume**을 마운트하고 `POLICY_STORE_PATH` 환경변수에
