@@ -2,31 +2,32 @@
 ABAP Analyzer — Railway 배포용 FastAPI 웹 서비스.
 
 엔드포인트:
-  GET  /         코드 붙여넣기 웹 UI
-  GET  /health   상태 확인(모델/규칙 수)
-  POST /analyze  {"source": "<ABAP 코드>"} → findings JSON
+  GET  /                 코드 붙여넣기 + 정책 관리 웹 UI
+  GET  /health           상태(모델/활성 규칙 수/정책 출처)
+  POST /analyze          {"source": "<ABAP 코드>"} → findings JSON
+  GET  /policy           현재 활성 정책 조회
+  POST /policy           severity 정책 파일(xlsx/csv) 업로드 → 활성 정책 교체
+  POST /policy/reset     정책을 기본값(catalog)으로 되돌림
+  GET  /policy/template.csv  작성용 CSV 템플릿 다운로드
 
-실행:
-  uvicorn webapp.app:app --host 0.0.0.0 --port ${PORT:-8000}
+실행: uvicorn webapp.app:app --host 0.0.0.0 --port ${PORT:-8000}
 공유 코어(src/core)를 그대로 재사용한다.
 """
 import os
 import sys
 
-# src/core 를 import 경로에 추가 (Foundry 버전과 코어 공유)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "src"))
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.responses import HTMLResponse  # noqa: E402
+from fastapi import FastAPI, UploadFile, File  # noqa: E402
+from fastapi.responses import HTMLResponse, Response, JSONResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from core import analyze  # noqa: E402
-from webapp.policy import load_policy  # noqa: E402
+from webapp import policy  # noqa: E402
 from webapp.anthropic_adapter import make_complete_fn, DEFAULT_MODEL  # noqa: E402
 
-app = FastAPI(title="ABAP Analyzer", version="1.0")
-_POLICY = load_policy()
+app = FastAPI(title="ABAP Analyzer", version="1.1")
 
 
 class AnalyzeIn(BaseModel):
@@ -35,7 +36,9 @@ class AnalyzeIn(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": DEFAULT_MODEL, "active_rules": len(_POLICY)}
+    return {"status": "ok", "model": DEFAULT_MODEL,
+            "active_rules": len(policy.get_active()),
+            "policy_source": policy.get_source()}
 
 
 @app.post("/analyze")
@@ -44,7 +47,46 @@ def analyze_endpoint(body: AnalyzeIn):
         return {"findings": [], "summary": {"high": 0, "medium": 0, "low": 0}, "errors": []}
     complete = make_complete_fn()
     return analyze.analyze_source(
-        body.source, _POLICY, complete, merge_developer_into_system=True)
+        body.source, policy.get_active(), complete, merge_developer_into_system=True)
+
+
+# ---------- 정책 관리 ----------
+@app.get("/policy")
+def get_policy():
+    rows = policy.get_active()
+    return {"source": policy.get_source(), "count": len(rows), "rules": rows}
+
+
+@app.post("/policy")
+async def upload_policy(file: UploadFile = File(...)):
+    data = await file.read()
+    if not data:
+        return JSONResponse(status_code=400, content={"error": "빈 파일입니다."})
+    try:
+        overrides = policy.parse_upload(file.filename, data)
+    except Exception as e:  # 파싱 실패
+        return JSONResponse(status_code=400, content={"error": f"파싱 실패: {e}"})
+    if not overrides:
+        return JSONResponse(status_code=400,
+                            content={"error": "유효한 rule_id 행을 찾지 못했습니다."})
+    rows = policy.set_from_overrides(overrides, source=f"upload:{file.filename}")
+    return {"source": policy.get_source(), "count": len(rows), "rules": rows}
+
+
+@app.post("/policy/reset")
+def reset_policy():
+    rows = policy.reset()
+    return {"source": policy.get_source(), "count": len(rows), "rules": rows}
+
+
+@app.get("/policy/template.csv")
+def policy_template():
+    csv_text = policy.template_csv()
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="severity_policy_template.csv"'},
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -68,17 +110,24 @@ INDEX_HTML = """<!doctype html>
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); }
-  header { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; gap:14px; }
+  header { padding:18px 24px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; gap:14px; }
   header h1 { margin:0; font-size:20px; letter-spacing:-.01em; }
   header .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
   header .model { margin-left:auto; font-family:var(--mono); font-size:12px; color:var(--muted); }
+
+  .policybar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 24px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .policybar .lbl { font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+  .policybar .state { font-size:13px; color:var(--muted); }
+  .policybar .spacer { flex:1; }
+  .policybar input[type=file]{ font-size:12px; color:var(--muted); max-width:230px; }
+
   main { max-width:1100px; margin:0 auto; padding:24px; display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   @media (max-width:820px){ main{ grid-template-columns:1fr; } }
   .panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
   .panel h2 { margin:0; padding:12px 16px; font-size:12px; font-family:var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); background:var(--surface2); }
   textarea { width:100%; min-height:420px; border:0; background:transparent; color:var(--ink); font-family:var(--mono); font-size:13px; line-height:1.6; padding:14px 16px; resize:vertical; outline:none; }
   .bar { display:flex; gap:10px; align-items:center; padding:12px 16px; border-top:1px solid var(--border); }
-  button { font-family:var(--sans); font-weight:600; font-size:14px; padding:9px 18px; border-radius:8px; border:0; cursor:pointer; background:var(--accent); color:#05222a; }
+  button, .btn { font-family:var(--sans); font-weight:600; font-size:13px; padding:8px 14px; border-radius:8px; border:0; cursor:pointer; background:var(--accent); color:#05222a; text-decoration:none; display:inline-block; }
   button:disabled { opacity:.55; cursor:default; }
   .ghost { background:transparent; color:var(--muted); border:1px solid var(--border); }
   .status { font-size:13px; color:var(--muted); }
@@ -108,6 +157,17 @@ INDEX_HTML = """<!doctype html>
     <h1>ABAP Analyzer</h1>
     <span class="model" id="model"></span>
   </header>
+
+  <div class="policybar">
+    <span class="lbl">Severity 정책</span>
+    <span class="state" id="pstate">로딩 중...</span>
+    <span class="spacer"></span>
+    <a class="btn ghost" href="/policy/template.csv">템플릿(CSV) 다운로드</a>
+    <input type="file" id="pfile" accept=".csv,.xlsx,.xlsm">
+    <button id="pupload">업로드</button>
+    <button class="ghost" id="preset">기본값</button>
+  </div>
+
   <main>
     <section class="panel">
       <h2>ABAP 소스 붙여넣기</h2>
@@ -150,9 +210,37 @@ const $ = s => document.querySelector(s);
 const sevClass = s => s === 'high' ? 'high' : s === 'medium' ? 'med' : 'low';
 const esc = t => (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-fetch('/health').then(r=>r.json()).then(d=>{ $('#model').textContent = 'model: '+d.model+' · '+d.active_rules+' rules'; }).catch(()=>{});
+function loadState(){
+  fetch('/health').then(r=>r.json()).then(d=>{
+    $('#model').textContent = 'model: '+d.model;
+    $('#pstate').textContent = '활성 규칙 '+d.active_rules+'개 · 출처: '+d.policy_source;
+  }).catch(()=>{ $('#pstate').textContent = '상태 조회 실패'; });
+}
+loadState();
 
 $('#sample').onclick = () => { $('#src').value = SAMPLE; };
+
+$('#pupload').onclick = async () => {
+  const f = $('#pfile').files[0];
+  if (!f) { $('#pstate').textContent = '파일을 선택하세요.'; return; }
+  $('#pupload').disabled = true; $('#pstate').textContent = '업로드 중...';
+  const fd = new FormData(); fd.append('file', f);
+  try {
+    const res = await fetch('/policy', {method:'POST', body:fd});
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || ('HTTP '+res.status));
+    $('#pstate').textContent = '반영됨 · 활성 규칙 '+d.count+'개 · 출처: '+d.source;
+  } catch(e) {
+    $('#pstate').textContent = '업로드 실패: '+e.message;
+  } finally { $('#pupload').disabled = false; }
+};
+
+$('#preset').onclick = async () => {
+  const res = await fetch('/policy/reset', {method:'POST'});
+  const d = await res.json();
+  $('#pstate').textContent = '기본값으로 복원 · 활성 규칙 '+d.count+'개';
+  $('#pfile').value = '';
+};
 
 $('#run').onclick = async () => {
   const source = $('#src').value;
@@ -162,8 +250,7 @@ $('#run').onclick = async () => {
   try {
     const res = await fetch('/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source})});
     if (!res.ok) throw new Error('HTTP '+res.status);
-    const data = await res.json();
-    render(data);
+    render(await res.json());
     $('#status').textContent = '완료';
   } catch (e) {
     $('#results').innerHTML = '<div class="err">오류: '+esc(e.message)+'</div>';

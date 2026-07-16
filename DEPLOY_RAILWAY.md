@@ -57,8 +57,20 @@ uvicorn webapp.app:app --port 8000
 
 - `POST /analyze` `{ "source": "<ABAP 코드>" }` → 청킹 → Claude 분석(정책 프롬프트 주입) →
   JSON 스키마 검증 + 라인범위 환각제거 + 정책 외 규칙 필터 → `{findings, summary, errors}`
-- 정책은 `webapp/policy.py`가 `core.catalog` 기본 severity로 구성. 조직 정책 CSV를 쓰려면
-  `SEVERITY_POLICY_CSV` 환경변수에 파일 경로 지정(컬럼: `rule_id,severity[,enabled]`).
+
+## Severity 정책 업로드 (각 모듈이 작성 → 반영)
+
+웹 UI 상단 "Severity 정책" 바에서:
+1. **템플릿(CSV) 다운로드** → 각 모듈/팀이 `org_severity`(high/medium/low/off)·`enabled`(Y/N) 작성
+   - 기존 Excel 템플릿([make_template.py](tools/make_template.py) 산출 `severity_policy_template.xlsx`)도 그대로 업로드 가능
+2. **업로드**(csv/xlsx) → 활성 정책이 즉시 교체되고 이후 분석에 반영
+3. **기본값** → catalog 기본 severity로 복원
+
+엔드포인트: `GET /policy`, `POST /policy`(multipart file), `POST /policy/reset`, `GET /policy/template.csv`
+
+**영속성(중요):** 기본은 인스턴스 메모리라 재배포/재시작 시 기본값으로 돌아간다.
+재시작 후에도 유지하려면 Railway **Volume**을 마운트하고 `POLICY_STORE_PATH` 환경변수에
+그 경로의 JSON 파일(예: `/data/severity_policy.json`)을 지정한다.
 
 ## 확인된 사항 (로컬 실측)
 
