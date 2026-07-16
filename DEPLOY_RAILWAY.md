@@ -29,7 +29,7 @@ ABAP_Analyzer/
 3. 저장소 루트가 `ABAP_Analyzer`가 아니면, 서비스 **Settings → Root Directory** 를 `ABAP_Analyzer`로 지정 (Dockerfile 이 여기 있음).
 4. **Variables** 탭에서 환경변수 추가:
    - `ANTHROPIC_API_KEY` = `sk-ant-...`  (필수)
-   - `ANTHROPIC_MODEL` = `claude-opus-4-8` (선택, 기본값. 저비용은 `claude-sonnet-5`)
+   - `ANTHROPIC_MODEL` = `claude-opus-4-6` (선택, 기본값. 다른 모델로 교체 가능)
    - `ANTHROPIC_MAX_TOKENS` = `8000` (선택)
 5. 배포되면 Railway가 공개 URL을 발급. `/health` 로 상태 확인, `/` 로 UI 접속.
 
@@ -80,6 +80,6 @@ uvicorn webapp.app:app --port 8000
 
 ## 비용·주의
 
-- 분석 1건마다 Claude API 호출료 발생 (opus-4-8 기준 입력 $5 / 출력 $25 per 1M tokens).
+- 분석 1건마다 Claude API 호출료 발생 (opus-4-6 기준 입력 $5 / 출력 $25 per 1M tokens).
 - 공개 URL이므로 필요시 Railway 앞단에 인증/레이트리밋 추가 권장.
 - 코드가 Anthropic API로 전송됨 — 민감 소스는 정책 검토 후 사용.
